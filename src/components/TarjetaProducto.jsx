@@ -1,5 +1,5 @@
 // Ya viene listo. Pinta un producto y avisa al padre cuando lo agregan.
-function TarjetaProducto({ producto, segundos, onAgregar }) {
+function TarjetaProducto({ producto, segundos, onAgregar, onVerFicha }) {
     const precio = producto.nombre === "Propulsor turbo" && segundos > 0
         ? 450
         : producto.precio;
@@ -15,6 +15,12 @@ function TarjetaProducto({ producto, segundos, onAgregar }) {
                 onClick={() => onAgregar({ ...producto, precio })}
             >
                 Agregar al carrito
+            </button>
+            <button
+                className="boton-ficha"
+                onClick={() => onVerFicha(producto.id)}
+            >
+                Ver ficha
             </button>
         </article>
     );

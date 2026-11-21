@@ -1,27 +1,56 @@
 import { useState, useEffect } from "react";
 import Encabezado from "./components/Encabezado.jsx";
-import TarjetaProducto from "./components/TarjetaProducto.jsx";
+import Catalogo from "./components/Catalogo.jsx";
 import PanelCarrito from "./components/PanelCarrito.jsx";
 import Aviso from "./components/Aviso.jsx";
 import OfertaRelampago from "./components/OfertaRelampago.jsx";
-import { productos } from "./data/productos.js";
+import FichaProducto from "./components/FichaProducto.jsx";
+// Extra: descomenta esta línea cuando llegues al Extra para curiosos
+import PanelPruebas from "./components/PanelPruebas.jsx";
+
+// El catálogo ya no vive en src/data/productos.js: lo publica el servidor de la estación en esta URL.
+// Para probar error y vacío, cámbiala por "/api/productos-roto.json" o "/api/productos-vacio.json".
+const URL_CATALOGO = "/api/productos.json";
 
 function App() {
     // Estado de la tienda (ya viene listo)
     const [carrito, setCarrito] = useState([]);
     const [aviso, setAviso] = useState("");
     const [carritoAbierto, setCarritoAbierto] = useState(false);
-    const [segundos, setSegundos] = useState(60);
+    const [fichaId, setFichaId] = useState(null);
+    const [url, setUrl] = useState(URL_CATALOGO);
 
-    useEffect(() => {
-        if (segundos === 0) return;
+    // ===== Ticket 1 · El catálogo llega del servidor =====
+    // TODO 1.1 · Los tres estados nuevos ya están declarados. Revisa el valor inicial de cada uno:
+    //   productos arranca en [] porque en el primer render la respuesta todavía no existe.
+    //   cargando arranca en true porque el pedido sale apenas aparece App.
+    //   error arranca en "" porque todavía no falló nada.
+    const [productos, setProductos] = useState([]);
+    const [cargando, setCargando] = useState(true);
+    const [error, setError] = useState("");
 
-        const timeoutId = setTimeout(() => {
-            setSegundos((actual) => actual - 1);
-        }, 1000);
+    // Carga el catálogo y conserva el error para mostrarlo si falla la petición.
+    async function cargarCatalogo() {
+        setCargando(true);
+        setError("");
 
-        return () => clearTimeout(timeoutId);
-    }, [segundos]);
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`El servidor respondió ${response.status}`);
+
+            const datos = await response.json();
+            setProductos(datos);
+        } catch (e) {
+            setError(e.message);
+        } finally {
+            setCargando(false);
+        }
+    }
+
+    // TODO 1.3 · El pedido sale una sola vez, cuando App aparece: un useEffect con [] que llama a cargarCatalogo().
+    //   Ojo: el efecto NO es async. Solo llama a la función.
+    useEffect(() => { cargarCatalogo(); }, [url]);
+    // ===== fin Ticket 1 =====
 
     // Valores calculados a partir del carrito (ya vienen listos)
     const totalUnidades = carrito.reduce((suma, item) => suma + item.cantidad, 0);
@@ -29,15 +58,11 @@ function App() {
 
     // Si el producto ya está en el carrito, le sube la cantidad; si no, lo agrega con cantidad 1
     function agregarAlCarrito(producto) {
-        const yaEsta = carrito.some(
-            (item) => item.id === producto.id && item.precio === producto.precio
-        );
+        const yaEsta = carrito.some((item) => item.id === producto.id);
 
         if (yaEsta) {
             setCarrito(carrito.map((item) =>
-                item.id === producto.id && item.precio === producto.precio
-                    ? { ...item, cantidad: item.cantidad + 1 }
-                    : item
+                item.id === producto.id ? { ...item, cantidad: item.cantidad + 1 } : item
             ));
         } else {
             setCarrito([...carrito, { ...producto, cantidad: 1 }]);
@@ -46,62 +71,32 @@ function App() {
         setAviso(`Agregaste ${producto.nombre} al carrito`);
     }
 
-    function quitarDelCarrito(id, precio) {
-        setCarrito(carrito.filter((item) => item.id !== id || item.precio !== precio));
+    function quitarDelCarrito(id) {
+        setCarrito(carrito.filter((item) => item.id !== id));
     }
 
-    // ────────────────────────────────────────────────────────────
-    //  TICKET 1 · La pestaña cuenta el carrito
-    //  Cuando el carrito cambie, la pestaña del navegador debe decir
-    //  "(3) Mercado Orbital" (con el número real de unidades).
-    //
-    //  Pistas:
-    //  - Usa useEffect (ya está importado arriba).
-    //  - El texto de la pestaña se cambia con document.title = ...
-    //  - El efecto lee totalUnidades: ¿qué va en el arreglo de dependencias?
-    // ────────────────────────────────────────────────────────────
-
-    // TODO Ticket 1
+    // ===== INICIO · L1, Ticket 1 =====
+    // La pestaña muestra cuántas unidades hay en el carrito
     useEffect(() => {
         document.title = `(${totalUnidades}) Mercado Orbital`;
     }, [totalUnidades]);
+    // ===== FIN · L1, Ticket 1 =====
 
-    // ────────────────────────────────────────────────────────────
-    //  TICKET 2 · El aviso se borra solo
-    //  Al agregar un producto aparece el aviso abajo, pero se queda
-    //  pegado para siempre. Debe desaparecer a los 2,5 segundos.
-    //
-    //  Pistas:
-    //  - Si aviso está vacío (""), el efecto no hace nada: return.
-    //  - setTimeout(() => { ... }, 2500) espera y luego ejecuta.
-    //    Dentro, vuelve a dejar el aviso vacío con setAviso("").
-    //  - setTimeout devuelve un id. Guárdalo en una constante.
-    //  - Cleanup: return () => clearTimeout(id);
-    //  - El efecto debe correr cada vez que aviso cambia.
-    // ────────────────────────────────────────────────────────────
-
-    // TODO Ticket 2
+    // ===== INICIO · L1, Ticket 2 =====
+    // El aviso se borra solo a los 2,5 segundos
     useEffect(() => {
-        if (!aviso) return;
+        if (aviso === "") return;
 
-        const id = setTimeout(() => setAviso(""), 2500);
+        const id = setTimeout(() => {
+            setAviso("");
+        }, 2500);
+
         return () => clearTimeout(id);
-
     }, [aviso]);
+    // ===== FIN · L1, Ticket 2 =====
 
-    // ────────────────────────────────────────────────────────────
-    //  TICKET 3 · Escape cierra el carrito
-    //  Con el panel del carrito abierto, la tecla Escape lo cierra.
-    //
-    //  Pistas (es el mismo patrón de la teoría):
-    //  - Dentro del efecto define function manejarTecla(e) { ... }
-    //  - Si e.key === "Escape", llama a setCarritoAbierto(false).
-    //  - window.addEventListener("keydown", manejarTecla);
-    //  - Cleanup: return () => window.removeEventListener("keydown", manejarTecla);
-    //  - El efecto no lee ningún estado: el arreglo va vacío.
-    // ────────────────────────────────────────────────────────────
-
-    // TODO Ticket 3
+    // ===== INICIO · L1, Ticket 3 =====
+    // La tecla Escape cierra el panel del carrito
     useEffect(() => {
         function manejarTecla(e) {
             if (e.key === "Escape") {
@@ -111,27 +106,24 @@ function App() {
 
         window.addEventListener("keydown", manejarTecla);
 
-        return () => {
-            window.removeEventListener("keydown", manejarTecla);
-        };
+        return () => window.removeEventListener("keydown", manejarTecla);
     }, []);
+    // ===== FIN · L1, Ticket 3 =====
 
-    // ────────────────────────────────────────────────────────────
-    //  EXTRA (opcional) · La tecla C abre y cierra el carrito
-    //  Si el carrito está cerrado, C lo abre; si está abierto, lo cierra.
-    //  Ojo: este efecto sí lee carritoAbierto. Piensa qué va en el arreglo.
-    // ────────────────────────────────────────────────────────────
+    // ===== INICIO · L1, Extra =====
+    // La tecla C abre y cierra el carrito. Lee carritoAbierto, así que va en el arreglo
     useEffect(() => {
-        function manejarTecla(e) {
-            if (e.key.toLowerCase() === "c") {
+        function alternarConC(e) {
+            if (e.key === "c" || e.key === "C") {
                 setCarritoAbierto(!carritoAbierto);
             }
         }
 
-        window.addEventListener("keydown", manejarTecla);
-        return () => window.removeEventListener("keydown", manejarTecla);
-    }, [carritoAbierto]);
+        window.addEventListener("keydown", alternarConC);
 
+        return () => window.removeEventListener("keydown", alternarConC);
+    }, [carritoAbierto]);
+    // ===== FIN · L1, Extra =====
 
     return (
         <div className="app">
@@ -148,20 +140,32 @@ function App() {
                 </div>
             </section>
 
-            <OfertaRelampago segundos={segundos} />
+            {/* L1, Tarea, Ticket 1 */}
+            <OfertaRelampago />
 
-            <main className="catalogo">
-                {productos.map((producto) => (
-                    <TarjetaProducto
-                        key={producto.id}
-                        producto={producto}
-                        segundos={segundos}
-                        onAgregar={agregarAlCarrito}
-                    />
-                ))}
-            </main>
+            {/* Extra: aquí va <PanelPruebas url={url} onCambiarUrl={setUrl} /> */}
+            <PanelPruebas url={url} onCambiarUrl={setUrl} />
+
+            {/* Ticket 1 · Catalogo recibe los tres estados y la función para reintentar (Ticket 3) */}
+            <Catalogo
+                productos={productos}
+                cargando={cargando}
+                error={error}
+                onReintentar={cargarCatalogo}
+                onAgregar={agregarAlCarrito}
+                onVerFicha={setFichaId}
+            />
 
             <Aviso mensaje={aviso} />
+
+            {fichaId !== null && (
+                <FichaProducto
+                    id={fichaId}
+                    producto={productos.find((producto) => producto.id === fichaId)}
+                    onAgregar={agregarAlCarrito}
+                    onCerrar={() => setFichaId(null)}
+                />
+            )}
 
             {carritoAbierto && (
                 <PanelCarrito
